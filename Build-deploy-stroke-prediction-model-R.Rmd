@@ -1,0 +1,206 @@
+---
+title: "Build and deploy a stroke prediction model using R"
+date: "10.08.2023"
+output: html_document
+author: "Yash Hooda"
+---
+
+# About Data Analysis Report
+
+This RMarkdown file contains the report of the data analysis done for the project on building and deploying a stroke prediction model in R. It contains analysis such as data exploration, summary statistics and building the prediction models. The final report was completed on `r date()`. 
+
+**Data Description:**
+
+According to the World Health Organization (WHO) stroke is the 2nd leading cause of death globally, responsible for approximately 11% of total deaths.
+
+This data set is used to predict whether a patient is likely to get stroke based on the input parameters like gender, age, various diseases, and smoking status. Each row in the data provides relevant information about the patient.
+
+
+#Import data and data preprocessing
+
+## Load data and install packages
+install.packages("tidyverse")
+install.packages("tidymodels")
+install.packages("workflows")
+install.packages("tune")
+install.packages("randomForest")
+install.packages("dplyr")
+install.packages("caret")
+install.packages("rsample")
+install.packages("recipes")
+install.packages("parsnip")
+install.packages("yardstick")
+install.packages("magrittr")
+
+
+library(tidymodels)
+library(tidyverse)
+library(workflows)
+library(tune)
+library(caret)
+library(randomForest)
+library(dplyr)
+library(rsample)
+library(recipes)
+library(parsnip)
+library(yardstick)
+library(magrittr)
+
+## Describe and explore the data
+stroke_data <- read.csv("C:\\Users\\yashh\\OneDrive\\Desktop\\R Projects\\Stroke Prediction Project\\healthcare-dataset-stroke-data.csv")
+
+summary(stroke_data)
+
+#Build a plot on the average glucose level of stroke patients
+ggplot(stroke_data) +
+  geom_histogram(aes(x = avg_glucose_level))
+  
+#Build a plot on the number of strokes
+ggplot(stroke_data) +
+  geom_histogram(aes(x = stroke))
+  
+#Build a plot to compare the relationship between age and number of strokes
+#ggplot(data=stroke_data)+geom_smooth(mapping=aes(x=age,y=stroke))
+
+ ggplot(data=stroke_data, aes(x = age, fill = stroke)) +
+  geom_density(alpha = 0.5) +
+  labs(x = "Age", y = "Density") +
+  ggtitle("Density Plot of Age by Stroke Status") +
+  facet_wrap(~ stroke, ncol = 2)
+
+#Older patients tend to have more strokes then younger patients
+
+#Build a Density plot to compare the relationship between bmi and number of strokes
+ggplot(data=stroke_data, aes(x = bmi, fill = stroke)) +
+  geom_density(alpha = 0.5) +
+  labs(x = "BMI", y = "Density") +
+  ggtitle("Density Plot of BMI by Stroke Status") +
+  facet_wrap(~ stroke, ncol = 2)
+  
+#People with higher BMI tend to have more strokes then people with a lower BMI
+
+#Build a plot to compare the relationship between heart disease and number of strokes
+ggplot(data = stroke_data, aes(x = heart_disease, fill = stroke)) +
+  geom_bar(position = "dodge") +
+  labs(x = "Heart Disease", y = "Count") +
+  ggtitle("Bar Plot of Strokes by Heart Disease Status")
+
+#Patients who have not had heart disease have more strokes then patients with heart disease.
+
+#Build a plot to compare the relationship between smoking status and number of strokes
+ggplot(data = stroke_data, aes(x = smoking_status, fill = factor(stroke))) +
+  geom_bar() +
+  labs(x = "Smoking Status", y = "Count") +
+  ggtitle("Bar Plot of Strokes by Smoking Status")
+
+#Patients who never smoke have more strokes then patients who smoke or formely smoke, in addition there is a large group of people who didn't specify whether they smoke or not who have had more strokes then people who smokes or formely smoked.
+
+#Build a plot to compare the relationship between average glucose level and number of strokes
+ggplot(data=stroke_data)+geom_smooth(mapping=aes(x=avg_glucose_level,y=stroke)) +
+  labs(x = "Average Glucose Level", y = "Stroke") +
+  ggtitle("Line Plot of Average Glucose Level by Stroke")
+
+#Patients with higher glucose levels have more strokes
+
+#Build a plot to compare the relationship between hypertension and number of strokes
+ggplot(data = stroke_data, aes(x = hypertension, fill = factor(stroke))) +
+  geom_bar(position = "dodge") +
+  labs(x = "Hypertension", y = "Count") +
+  ggtitle("Grouped Bar Plot of Strokes by Hypertension Status")
+
+#Patients with little to no hypertension tend to have slightly more strokes 
+
+#Build a plot to compare the relationship between gender and number of strokes
+ggplot(data = stroke_data, aes(x = gender, fill = factor(stroke))) +
+  geom_bar(position = "stack") +
+  labs(x = "Gender", y = "Count") +
+  ggtitle("Stacked Bar Plot of Strokes by Gender")
+
+#Patients who identify as female have more strokes then male patients
+
+#Build a plot to compare the relationship between residence of patient and number of strokes
+ggplot(data = stroke_data, aes(x = Residence_type, fill = stroke)) +
+  geom_bar(position = "dodge") +
+  labs(x = "Residence Type", y = "Count") +
+  ggtitle("Bar Plot of Strokes by Residence Type")
+
+#People that live in urban areas slightly have more strokes then people living in rural areas
+
+#Build a plot to compare the relationship between marital status and number of strokes
+ggplot(data = stroke_data, aes(x = Residence_type, fill = ever_married)) +
+  geom_bar(position = "stack") +
+  labs(x = "Residence Type", fill = "Marital Status", y = "Count") +
+  ggtitle("Faceted Bar Plot of Strokes by Residence and Marital Status") +
+  facet_wrap(~ever_married)
+
+#Married people tend to have more strokes
+
+#Build a plot to compare the relationship between work type of patient and number of strokes
+ggplot(data = stroke_data, aes(x = Residence_type, fill = work_type)) +
+  geom_bar(position = "stack") +
+  labs(x = "Residence Type", fill = "Work Type", y = "Count") +
+  ggtitle("Faceted Bar Plot of Strokes by Residence and Work Type") +
+  facet_wrap(~work_type)
+
+
+#Private jobs tend to have the most strokes
+
+
+
+# Impute missing numerical values with median
+num_vars <- c("avg_glucose_level", "bmi")
+stroke_data[num_vars] <- lapply(stroke_data[num_vars], function(x) ifelse(is.na(x), median(x, na.rm = TRUE), x))
+
+# Impute missing categorical values with mode
+cat_vars <- c("gender", "ever_married", "work_type", "Residence_type", "smoking_status")
+stroke_data[cat_vars] <- lapply(stroke_data[cat_vars], function(x) ifelse(is.na(x), names(sort(table(x), decreasing = TRUE)[1]), x))
+
+
+# Create dummy variables for categorical features
+stroke_data <- stroke_data %>%
+  select(-id) %>%  # Remove the 'id' column if not useful for modeling
+  mutate_if(is.character, as.factor) %>%
+  mutate_if(is.factor, as.numeric)
+
+# Split the data into training and testing sets
+set.seed(123)  # for reproducibility
+train_index <- createDataPartition(stroke_data$stroke, p = 0.7, list = FALSE)
+train_data <- stroke_data[train_index, ]
+test_data <- stroke_data[-train_index, ]
+
+# Train a Random Forest model
+model_rf <- randomForest(stroke ~ ., data = train_data, ntree = 100)
+
+# View model summary
+print(model_rf)
+
+
+# Predict on the test data
+predictions <- predict(model_rf, test_data, type = "response")
+
+# Confusion matrix and accuracy
+confusion_matrix <- table(Actual = test_data$stroke, Predicted = predictions)
+accuracy <- sum(diag(confusion_matrix)) / sum(confusion_matrix)
+print(confusion_matrix)
+cat("Accuracy:", accuracy, "\n")
+
+- **Accuracy:** Measures the overall correctness of the model's predictions.
+- **Precision:** The proportion of true positive predictions among all positive predictions.
+- **Recall (Sensitivity):** The proportion of true positive predictions among all actual positives.
+- **F1-score:** The harmonic mean of precision and recall, providing a balance between the two.
+- **ROC Curve:** A graphical representation of the model's performance across different thresholds.
+
+
+#calculate other metrics like precision, recall, F1-score, etc.
+precision <- confusion_matrix[2, 2] / sum(confusion_matrix[, 2])
+recall <- confusion_matrix[2, 2] / sum(confusion_matrix[2, ])
+f1_score <- 2 * (precision * recall) / (precision + recall)
+
+# Plot ROC Curve
+library(pROC)
+roc_curve <- roc(test_data$stroke, as.numeric(predictions))
+plot(roc_curve)
+
+
+#Findings and Conclusions
+#Based on roc curve, there is strong evidence to suggest that the model is effective at identifying people who are likely to have a stroke, however the model is less effective at identifying people who are not likely to have a stroke and may classify individuals at risk for having a stroke when they are actually not at risk which explains the low accuracy score based on the actual and predicted values. Therefore this study should be taken with a grain of salt. Based on the data provided, there is evidence to suggest that patients who are older, have a higher BMI, no heart disease, never smoke, higher then average glucose levels, little to no hypertension, identify as a female, live in urban areas, married, and work at private jobs are at a higher risk of stroke.
